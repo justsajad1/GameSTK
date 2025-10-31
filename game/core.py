@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Dict, Mapping, Optional
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Dict, Optional
 
 import arcade
+from arcade.types.rect import XYWH
 from PIL import Image, ImageDraw
-import os
 
 try:  # Allow running both as a module and as a script alongside the other files.
     from . import settings  # type: ignore
 except ImportError:  # pragma: no cover - script execution path
     import settings  # type: ignore
 
-def make_dummy_sprite(color=(255, 0, 255, 255)) -> arcade.Texture:
+
+TextureBundle = Dict[str, list[arcade.Texture]]
+
+
+def make_dummy_sprite(color: tuple[int, int, int, int] = (255, 0, 255, 255)) -> arcade.Texture:
     """Create a plain placeholder texture used whenever an asset is missing."""
 
     img = Image.new("RGBA", (settings.FRAME_SIZE, settings.FRAME_SIZE), color)
@@ -25,35 +31,54 @@ def make_dummy_sprite(color=(255, 0, 255, 255)) -> arcade.Texture:
 DUMMY_FRAME = make_dummy_sprite()
 
 
-def load_sprite_sheet(sheet_path: str, frame_size: int = settings.FRAME_SIZE) -> Mapping[str, list[arcade.Texture]]:
+def load_sprite_sheet(
+    sheet_path: Path | str,
+    frame_size: int = settings.FRAME_SIZE,
+) -> TextureBundle:
     """Load a spritesheet into left/right oriented frames."""
 
-    if not os.path.exists(sheet_path):
+    texture_path = settings.ensure_path(sheet_path)
+    if not texture_path.is_file():
         # Fall back to dummy textures when the asset is not present.
-        print(f"Missing sprite replaced: {os.path.basename(sheet_path)}")
+        print(f"Missing sprite replaced: {texture_path.name}")
         return {"right": [DUMMY_FRAME], "left": [DUMMY_FRAME]}
-
-    sheet_img = Image.open(sheet_path).convert("RGBA")
-    sheet_width, sheet_height = sheet_img.size
-    num_frames = max(1, sheet_width // frame_size)
 
     frames_right: list[arcade.Texture] = []
     frames_left: list[arcade.Texture] = []
 
-    for frame_index in range(num_frames):
-        frame_img = sheet_img.crop((frame_index * frame_size, 0, (frame_index + 1) * frame_size, sheet_height))
-        tex_r = arcade.Texture(name=f"{sheet_path}_{frame_index}_R", image=frame_img)
-        frames_right.append(tex_r)
-        flipped = frame_img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-        tex_l = arcade.Texture(name=f"{sheet_path}_{frame_index}_L", image=flipped)
-        frames_left.append(tex_l)
+    with Image.open(texture_path) as sheet_image:
+        sheet_img = sheet_image.convert("RGBA")
+        sheet_width, sheet_height = sheet_img.size
+        num_frames = max(1, sheet_width // frame_size)
+
+        for frame_index in range(num_frames):
+            left = frame_index * frame_size
+            box = (left, 0, left + frame_size, sheet_height)
+            frame_img = sheet_img.crop(box).copy()
+
+            tex_r = arcade.Texture(
+                name=f"{texture_path.stem}_{frame_index}_R",
+                image=frame_img,
+            )
+            frames_right.append(tex_r)
+
+            flipped = frame_img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+            tex_l = arcade.Texture(
+                name=f"{texture_path.stem}_{frame_index}_L",
+                image=flipped,
+            )
+            frames_left.append(tex_l)
 
     if not frames_right:
         frames_right = [DUMMY_FRAME]
         frames_left = [DUMMY_FRAME]
 
     return {"right": frames_right, "left": frames_left}
+
+
 class Fighter:
+    """Animated character with input handling and combat state."""
+
     ACTION_FILES = {
         "idle": "Idle.png",
         "run": "Run.png",
@@ -72,7 +97,7 @@ class Fighter:
         y: float,
         controls: Mapping[str, int],
         name: str,
-        sprite_folder: str,
+        sprite_folder: Path | str,
         sounds: Mapping[str, Optional[arcade.Sound]],
         *,
         action_files: Optional[Mapping[str, str]] = None,
@@ -84,19 +109,23 @@ class Fighter:
         self.h = settings.FIGHTER_HEIGHT
         self.controls = controls
         self.name = name
-        self.sprite_folder = sprite_folder
+        self.sprite_folder = settings.ensure_path(sprite_folder)
         self.action_files = {k.lower(): v for k, v in (action_files or {}).items()}
         self.frame_size = frame_size
         self.sounds = sounds
 
-        self.reset()
+        self.animations: Dict[str, TextureBundle] = {}
+        self.image: Optional[arcade.Texture] = None
 
-        self.animations: Dict[str, Mapping[str, list[arcade.Texture]]] = {}
+        self.reset()
+        self._load_textures()
+
+    def _load_textures(self) -> None:
         actions = dict(self.ACTION_FILES)
         actions.update(self.action_files)
 
         for state, filename in actions.items():
-            sheet_path = os.path.join(self.sprite_folder, filename)
+            sheet_path = self.sprite_folder / filename
             self.animations[state] = load_sprite_sheet(sheet_path, frame_size=self.frame_size)
 
         self.image = self.animations["idle"]["right"][0]
@@ -104,7 +133,7 @@ class Fighter:
     def reset(self) -> None:
         self.x = self.spawn_x
         self.y = self.spawn_y
-        self.vel_y = 0
+        self.vel_y = 0.0
         self.on_ground = True
         self.facing = 1 if self.spawn_x < settings.WIDTH // 2 else -1
         self.health = 100
@@ -187,7 +216,7 @@ class Fighter:
         self.invincible_timer = 20
         hit_sound = self.sounds.get("hit") if self.sounds else None
         if hit_sound:
-            arcade.play_sound(hit_sound)
+            hit_sound.play()
         if self.health <= 0:
             self.die()
 
@@ -197,7 +226,7 @@ class Fighter:
         self.is_dead = True
         ko_sound = self.sounds.get("ko") if self.sounds else None
         if ko_sound:
-            arcade.play_sound(ko_sound)
+            ko_sound.play()
 
     def cancel_attack(self) -> None:
         if not self.is_attacking:
@@ -234,4 +263,5 @@ class Fighter:
 
     def draw(self) -> None:
         if self.image:
-            self.image.draw_sized(self.x, self.y, self.w, self.h)
+            dest_rect = XYWH(self.x, self.y, self.w, self.h)
+            arcade.draw_texture_rect(self.image, dest_rect)

@@ -1,4 +1,4 @@
-"""Entrypoint for Der Kampf des Zwei Könige."""
+"""Entrypoint for Der Kampf der Zwei Koenige."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ except ImportError:  # pragma: no cover - script execution path
 
 def main() -> None:
     os.chdir(settings.BASE_DIR)
-    app.StickmanFighterGame()
+    _window = app.StickmanFighterGame()
     arcade.run()
 
 
