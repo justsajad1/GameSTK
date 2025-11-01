@@ -45,7 +45,7 @@ class StickmanFighterGame(arcade.Window):
             update_rate=1 / settings.FPS,
         )
 
-        self.state = "menu"  # "menu" | "options" | "playing" | "round_over" | "match_over"
+        self.state = "menu"  # "menu" | "options" | "character_select" | "playing" | "round_over" | "match_over"
         self.mode: Optional[str] = None  # "day" | "night"
         self.round_restart_timer = 0
         self.match_restart_timer = 0
@@ -71,37 +71,18 @@ class StickmanFighterGame(arcade.Window):
             "kick": settings.key_code("NUM_1", "NUMPAD_1", "KP_1", default=ord("1")),
         }
 
-        fighter1_cfg = settings.FIGHTER_OVERRIDES["fighter1"]
-        fighter2_cfg = settings.FIGHTER_OVERRIDES["fighter2"]
+        self.fighter_catalog = settings.FIGHTERS
+        self.fighter_keys = list(self.fighter_catalog.keys())
+        self.player_selection = dict(settings.DEFAULT_FIGHTER_SELECTION)
 
-        fighter1_path = settings.ensure_path(settings.FIGHTER_SPRITE_DIRS["fighter1"])
-        fighter2_path = settings.ensure_path(settings.FIGHTER_SPRITE_DIRS["fighter2"])
-
-        self.fighter1 = core.Fighter(
-            400,
-            150,
-            self.controls1,
-            "Tutankhamun",
-            fighter1_path,
-            self.sounds,
-            action_files=fighter1_cfg["action_files"],
-            frame_size=fighter1_cfg["frame_size"],
-        )
-        self.fighter2 = core.Fighter(
-            900,
-            150,
-            self.controls2,
-            "Charlemagne",
-            fighter2_path,
-            self.sounds,
-            action_files=fighter2_cfg["action_files"],
-            frame_size=fighter2_cfg["frame_size"],
-        )
+        self.fighter1 = self._create_fighter("player1")
+        self.fighter2 = self._create_fighter("player2")
 
         self.keys: Dict[int, bool] = {}
         self.winner: Optional[str] = None
         self.score1 = 0
         self.score2 = 0
+        self._text_objects: Dict[str, arcade.Text] = {}
 
     def _start_music_loop(self) -> None:
         """Begin background music playback if an asset is available."""
@@ -132,6 +113,180 @@ class StickmanFighterGame(arcade.Window):
             delete()
         self.music_player = None
 
+    def _create_fighter(self, slot: str) -> core.Fighter:
+        """Instantiate a fighter for the given player slot based on the current selection."""
+
+        selection = self.player_selection.get(slot)
+        if selection not in self.fighter_catalog:
+            fallback = next(iter(self.fighter_catalog))
+            self.player_selection[slot] = fallback
+            selection = fallback
+
+        config = self.fighter_catalog[selection]
+        controls = self.controls1 if slot == "player1" else self.controls2
+        spawn_x = 400 if slot == "player1" else 900
+        action_files = config.get("action_files", {})
+        frame_size = config.get("frame_size", settings.FRAME_SIZE)
+        sprite_dir = settings.ensure_path(config["sprite_dir"])
+        display_name = config.get("name", selection.title())
+        return core.Fighter(
+            spawn_x,
+            settings.GROUND_Y,
+            controls,
+            display_name,
+            sprite_dir,
+            self.sounds,
+            action_files=action_files,
+            frame_size=frame_size,
+            min_scale=config.get("min_scale", settings.MIN_FIGHTER_SCALE),
+            max_scale=config.get("max_scale", settings.MAX_FIGHTER_SCALE),
+        )
+
+    def _refresh_fighter(self, slot: str) -> None:
+        if slot == "player1":
+            self.fighter1 = self._create_fighter(slot)
+        else:
+            self.fighter2 = self._create_fighter(slot)
+
+    def _refresh_fighters(self) -> None:
+        self._refresh_fighter("player1")
+        self._refresh_fighter("player2")
+
+    def _draw_text(
+        self,
+        key: str,
+        text: str,
+        x: float,
+        y: float,
+        color: tuple[int, int, int] | tuple[int, int, int, int],
+        font_size: int,
+        *,
+        anchor_x: str = "left",
+        anchor_y: str = "baseline",
+        bold: bool = False,
+    ) -> None:
+        text_obj = self._text_objects.get(key)
+        if text_obj is None:
+            text_obj = arcade.Text(
+                text,
+                x,
+                y,
+                color,
+                font_size,
+                anchor_x=anchor_x,
+                anchor_y=anchor_y,
+                bold=bold,
+            )
+            self._text_objects[key] = text_obj
+        else:
+            text_obj.text = text
+            text_obj.x = x
+            text_obj.y = y
+            text_obj.color = color
+            text_obj.font_size = font_size
+            text_obj.anchor_x = anchor_x
+            text_obj.anchor_y = anchor_y
+            text_obj.bold = bold
+        text_obj.draw()
+
+    def _character_select_layout(self) -> dict[str, object]:
+        """Return layout metrics for rendering and hit testing the character select screen."""
+
+        row_gap = 70
+        cell_height = 56
+        top_margin = 200
+        top_y = settings.HEIGHT - top_margin
+
+        rows: list[dict[str, object]] = []
+        for index, key in enumerate(self.fighter_keys):
+            config = self.fighter_catalog[key]
+            display_name = config.get("name", key.title())
+            y_center = top_y - index * row_gap
+            rows.append(
+                {
+                    "key": key,
+                    "name": display_name,
+                    "y_center": y_center,
+                    "y0": y_center - cell_height / 2,
+                    "y1": y_center + cell_height / 2,
+                }
+            )
+
+        column_width = 320
+        column_gap = 80
+        left_x = settings.WIDTH / 2 - column_width - column_gap / 2
+        right_x = settings.WIDTH / 2 + column_gap / 2
+
+        return {
+            "rows": rows,
+            "column_width": column_width,
+            "left_x": left_x,
+            "right_x": right_x,
+        }
+
+    def _draw_character_select(self) -> None:
+        layout = self._character_select_layout()
+        left_x = layout["left_x"]  # type: ignore[assignment]
+        right_x = layout["right_x"]  # type: ignore[assignment]
+        column_width = layout["column_width"]  # type: ignore[assignment]
+
+        arcade.draw_lrbt_rectangle_filled(0, settings.WIDTH, 0, settings.HEIGHT, (18, 18, 18))
+        self._draw_text(
+            "char_select_title",
+            "Charakter Auswahl",
+            settings.WIDTH / 2,
+            settings.HEIGHT - 120,
+            settings.WHITE,
+            42,
+            anchor_x="center",
+            bold=True,
+        )
+
+        header_y = settings.HEIGHT - 160
+        for label, center_x in [
+            ("Spieler 1", float(left_x) + column_width / 2),
+            ("Spieler 2", float(right_x) + column_width / 2),
+        ]:
+            self._draw_text(
+                f"char_select_header_{label}",
+                label,
+                center_x,
+                header_y,
+                settings.WHITE,
+                24,
+                anchor_x="center",
+                bold=True,
+            )
+
+        for row in layout["rows"]:  # type: ignore[assignment]
+            row_key = row["key"]
+            y0 = row["y0"]
+            y1 = row["y1"]
+            y_center = row["y_center"]
+            name = row["name"]
+            for player, x0 in (("player1", left_x), ("player2", right_x)):
+                selected = self.player_selection[player] == row_key
+                fill_color = (70, 70, 70)
+                outline_color = (200, 200, 200)
+                text_color = settings.WHITE
+                if selected:
+                    fill_color = (125, 95, 40)
+                    outline_color = (240, 220, 140)
+                    text_color = (255, 245, 215)
+                arcade.draw_lrbt_rectangle_filled(x0, x0 + column_width, y0, y1, fill_color)
+                arcade.draw_lrbt_rectangle_outline(x0, x0 + column_width, y0, y1, outline_color, 3)
+                self._draw_text(
+                    f"char_select_row_{row_key}_{player}",
+                    str(name),
+                    x0 + column_width / 2,
+                    y_center,
+                    text_color,
+                    20,
+                    anchor_x="center",
+                    anchor_y="center",
+                )
+
+
     def load_background(self, mode: str) -> None:
         bg_filename = "arena_day.jpg" if mode == "day" else "arena_night.jpg"
         background_path = settings.asset_path("image_files", bg_filename)
@@ -145,6 +300,7 @@ class StickmanFighterGame(arcade.Window):
     def start_match(self) -> None:
         """Called after the player chooses mode on the menu."""
 
+        self._refresh_fighters()
         self.score1 = 0
         self.score2 = 0
         self.winner = None
@@ -215,7 +371,7 @@ class StickmanFighterGame(arcade.Window):
             top=top_y + 10,
             color=settings.GREEN,
         )
-        arcade.draw_text(f"{self.fighter1.name}", x1_left, top_y + 16, settings.WHITE, 14)
+        self._draw_text("hud_player1_name", f"{self.fighter1.name}", x1_left, top_y + 16, settings.WHITE, 14)
 
         x2_right = settings.WIDTH - pad
         x2_left = settings.WIDTH - pad - bar_w
@@ -234,7 +390,7 @@ class StickmanFighterGame(arcade.Window):
             top=top_y + 10,
             color=settings.GREEN,
         )
-        arcade.draw_text(f"{self.fighter2.name}", x2_right - 120, top_y + 16, settings.WHITE, 14)
+        self._draw_text("hud_player2_name", f"{self.fighter2.name}", x2_right - 120, top_y + 16, settings.WHITE, 14)
 
         pip_r = 8
         for i in range(settings.WINS_TO_MATCH):
@@ -251,7 +407,8 @@ class StickmanFighterGame(arcade.Window):
         if self.mode:
             mode_text = {"day": "TAG", "night": "NACHT"}.get(self.mode, "")
             if mode_text:
-                arcade.draw_text(
+                self._draw_text(
+                    "hud_mode",
                     mode_text,
                     settings.WIDTH / 2,
                     settings.HEIGHT - 60,
@@ -272,6 +429,10 @@ class StickmanFighterGame(arcade.Window):
             self._draw_options()
             return
 
+        if self.state == "character_select":
+            self._draw_character_select()
+            return
+
         if self.background:
             offset_x = 20 * math.sin(self.camera_offset / 60)
             cx = settings.WIDTH // 2 + offset_x
@@ -286,7 +447,8 @@ class StickmanFighterGame(arcade.Window):
         self.draw_hud()
 
         if self.state == "round_over":
-            arcade.draw_text(
+            self._draw_text(
+                "round_over_title",
                 f"{self.winner} hat die Runde gewonnen!",
                 settings.WIDTH / 2,
                 settings.HEIGHT / 2 + 40,
@@ -295,7 +457,8 @@ class StickmanFighterGame(arcade.Window):
                 anchor_x="center",
                 bold=True,
             )
-            arcade.draw_text(
+            self._draw_text(
+                "round_over_hint",
                 "Naechste Runde...",
                 settings.WIDTH / 2,
                 settings.HEIGHT / 2 - 5,
@@ -304,7 +467,8 @@ class StickmanFighterGame(arcade.Window):
                 anchor_x="center",
             )
         elif self.state == "match_over":
-            arcade.draw_text(
+            self._draw_text(
+                "match_over_title",
                 f"{self.winner} GEWINNT DAS DUELL!",
                 settings.WIDTH / 2,
                 settings.HEIGHT / 2 + 40,
@@ -313,7 +477,8 @@ class StickmanFighterGame(arcade.Window):
                 anchor_x="center",
                 bold=True,
             )
-            arcade.draw_text(
+            self._draw_text(
+                "match_over_hint",
                 "Zurueck zum Menue...  (R = Wiederspielen, M = Menue)",
                 settings.WIDTH / 2,
                 settings.HEIGHT / 2 - 5,
@@ -343,8 +508,11 @@ class StickmanFighterGame(arcade.Window):
 
     def on_key_press(self, symbol: int, modifiers: int) -> None:  # noqa: D401 - Arcade signature
         if symbol == settings.KEY.ESCAPE:
-            self._stop_music()
-            arcade.close_window()
+            if self.state == "menu":
+                self._stop_music()
+                arcade.close_window()
+            else:
+                self.back_to_menu()
             return
 
         if self.state == "menu":
@@ -352,6 +520,8 @@ class StickmanFighterGame(arcade.Window):
                 if self.mode is None:
                     self.mode = "night"
                 self.start_match()
+            elif symbol == settings.KEY.C:
+                self.state = "character_select"
             elif symbol == settings.KEY.O:
                 self.state = "options"
             elif symbol == settings.KEY.X:
@@ -359,15 +529,19 @@ class StickmanFighterGame(arcade.Window):
                 arcade.close_window()
             return
 
+        if self.state == "character_select":
+            enter_keys = (settings.KEY.ENTER, getattr(settings.KEY, "RETURN", settings.KEY.ENTER))
+            if symbol in enter_keys or symbol == settings.KEY.M:
+                self.state = "menu"
+            return
+
         if self.state == "options":
             if symbol == settings.KEY.M:
                 self.state = "menu"
             elif symbol == settings.KEY.D:
                 self.mode = "day"
-                self.state = "menu"
             elif symbol == settings.KEY.N:
                 self.mode = "night"
-                self.state = "menu"
             return
 
         if self.state == "round_over":
@@ -395,23 +569,45 @@ class StickmanFighterGame(arcade.Window):
             gap = 30
             start_y = settings.HEIGHT / 2 + btn_h + gap
 
-            buttons = [
-                ("start", settings.WIDTH / 2 - btn_w / 2, start_y - btn_h / 2, btn_w, btn_h),
-                ("options", settings.WIDTH / 2 - btn_w / 2, start_y - (btn_h + gap) - btn_h / 2, btn_w, btn_h),
-                ("exit", settings.WIDTH / 2 - btn_w / 2, start_y - 2 * (btn_h + gap) - btn_h / 2, btn_w, btn_h),
-            ]
-            for name, bx, by, bw, bh in buttons:
+            button_names = ["start", "characters", "options", "exit"]
+            for index, name in enumerate(button_names):
+                bx = settings.WIDTH / 2 - btn_w / 2
+                by = start_y - index * (btn_h + gap) - btn_h / 2
+                bw = btn_w
+                bh = btn_h
                 if bx <= x <= bx + bw and by <= y <= y + bh:
                     if name == "start":
                         if self.mode is None:
                             self.mode = "night"
                         self.start_match()
+                    elif name == "characters":
+                        self.state = "character_select"
                     elif name == "options":
                         self.state = "options"
                     elif name == "exit":
                         self._stop_music()
                         arcade.close_window()
                     return
+
+        if self.state == "character_select":
+            layout = self._character_select_layout()
+            left_x = layout["left_x"]  # type: ignore[assignment]
+            right_x = layout["right_x"]  # type: ignore[assignment]
+            column_width = layout["column_width"]  # type: ignore[assignment]
+
+            for row in layout["rows"]:  # type: ignore[assignment]
+                y0 = row["y0"]
+                y1 = row["y1"]
+                if y0 <= y <= y1:
+                    if left_x <= x <= left_x + column_width:
+                        self.player_selection["player1"] = row["key"]
+                        self._refresh_fighter("player1")
+                        return
+                    if right_x <= x <= right_x + column_width:
+                        self.player_selection["player2"] = row["key"]
+                        self._refresh_fighter("player2")
+                        return
+            return
 
         if self.state == "options":
             btn_w = 300
@@ -423,16 +619,15 @@ class StickmanFighterGame(arcade.Window):
 
             if day_x <= x <= day_x + btn_w and y0 <= y <= y0 + btn_h:
                 self.mode = "day"
-                self.state = "menu"
                 return
             if night_x <= x <= night_x + btn_w and y0 <= y <= y0 + btn_h:
                 self.mode = "night"
-                self.state = "menu"
                 return
 
     def _draw_menu(self) -> None:
         arcade.draw_lrbt_rectangle_filled(0, settings.WIDTH, 0, settings.HEIGHT, (20, 20, 20))
-        arcade.draw_text(
+        self._draw_text(
+            "menu_title",
             settings.WINDOW_TITLE,
             settings.WIDTH / 2,
             settings.HEIGHT - 140,
@@ -447,13 +642,14 @@ class StickmanFighterGame(arcade.Window):
         gap = 30
         start_y = settings.HEIGHT / 2 + btn_h + gap
 
-        button_labels = ["STARTEN", "OPTIONEN", "VERLASSEN"]
+        button_labels = ["STARTEN", "CHARAKTERE", "OPTIONEN", "VERLASSEN"]
         for index, label in enumerate(button_labels):
             y = start_y - index * (btn_h + gap) - btn_h / 2
             x = settings.WIDTH / 2 - btn_w / 2
             arcade.draw_lrbt_rectangle_filled(x, x + btn_w, y, y + btn_h, (50, 50, 50))
             arcade.draw_lrbt_rectangle_outline(x, x + btn_w, y, y + btn_h, (200, 200, 200), 3)
-            arcade.draw_text(
+            self._draw_text(
+                f"menu_button_{index}",
                 label,
                 x + btn_w / 2,
                 y + btn_h / 2,
@@ -464,27 +660,30 @@ class StickmanFighterGame(arcade.Window):
             )
 
         current_mode = {"day": "TAG", "night": "NACHT"}.get(self.mode or "", "NICHT GEWAHLT")
-        mode_label = f"Modus: {current_mode}"
-        arcade.draw_text(
-            mode_label,
-            settings.WIDTH / 2,
-            settings.HEIGHT / 2 - 180,
-            (200, 200, 200),
-            16,
-            anchor_x="center",
-        )
-        arcade.draw_text(
-            "Klicke auf einen Block zum Auswaehlen",
-            settings.WIDTH / 2,
-            settings.HEIGHT / 2 - 210,
-            (180, 180, 180),
-            12,
-            anchor_x="center",
-        )
+        info_lines = [
+            (f"Modus: {current_mode}", 16, (200, 200, 200)),
+            (f"Spieler 1: {self.fighter1.name}", 16, (200, 200, 200)),
+            (f"Spieler 2: {self.fighter2.name}", 16, (200, 200, 200)),
+        ]
+        info_x = 30
+        info_base_y = 40
+        line_gap = 22
+        for index, (text, size, color) in enumerate(info_lines):
+            y = info_base_y + index * line_gap
+            self._draw_text(
+                f"menu_info_{index}",
+                text,
+                info_x,
+                y,
+                color,
+                size,
+                anchor_x="left",
+            )
 
     def _draw_options(self) -> None:
         arcade.draw_lrbt_rectangle_filled(0, settings.WIDTH, 0, settings.HEIGHT, (15, 15, 15))
-        arcade.draw_text(
+        self._draw_text(
+            "options_title",
             "Optionen",
             settings.WIDTH / 2,
             settings.HEIGHT - 120,
@@ -502,29 +701,36 @@ class StickmanFighterGame(arcade.Window):
         day_x = settings.WIDTH / 2 - gap / 2 - btn_w
         night_x = settings.WIDTH / 2 + gap / 2
 
-        for label, x in [("TAG", day_x), ("NACHT", night_x)]:
-            arcade.draw_lrbt_rectangle_filled(x, x + btn_w, y, y + btn_h, (60, 60, 60))
-            arcade.draw_lrbt_rectangle_outline(x, x + btn_w, y, y + btn_h, (220, 220, 220), 3)
-            arcade.draw_text(
+        for label, x, mode_key in [("TAG", day_x, "day"), ("NACHT", night_x, "night")]:
+            selected = self.mode == mode_key
+            fill_color = (110, 90, 50) if selected else (60, 60, 60)
+            outline_color = (240, 220, 140) if selected else (220, 220, 220)
+            text_color = (255, 245, 215) if selected else settings.WHITE
+            arcade.draw_lrbt_rectangle_filled(x, x + btn_w, y, y + btn_h, fill_color)
+            arcade.draw_lrbt_rectangle_outline(x, x + btn_w, y, y + btn_h, outline_color, 3)
+            self._draw_text(
+                f"options_button_{label}",
                 label,
                 x + btn_w / 2,
                 y + btn_h / 2,
-                settings.WHITE,
+                text_color,
                 26,
                 anchor_x="center",
                 anchor_y="center",
             )
 
-        arcade.draw_text(
-            "Waehle die Arena-Beleuchtung. Nach der Auswahl kehrst du zum Menue zurueck.",
+        self._draw_text(
+            "options_hint",
+            "Waehle die Arena-Beleuchtung. Bestaetige mit ESC fuer das Menue.",
             settings.WIDTH / 2,
             settings.HEIGHT / 2 - 120,
             (200, 200, 200),
             14,
             anchor_x="center",
         )
-        arcade.draw_text(
-            "ESC zum Beenden, M fuer Menue",
+        self._draw_text(
+            "options_escape_hint",
+            "M kehrt ebenfalls zum Menue zurueck",
             settings.WIDTH / 2,
             settings.HEIGHT / 2 - 150,
             (180, 180, 180),

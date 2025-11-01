@@ -34,17 +34,33 @@ DUMMY_FRAME = make_dummy_sprite()
 def load_sprite_sheet(
     sheet_path: Path | str,
     frame_size: int = settings.FRAME_SIZE,
-) -> TextureBundle:
-    """Load a spritesheet into left/right oriented frames."""
+) -> tuple[TextureBundle, dict[str, float]]:
+    """Load a spritesheet into left/right oriented frames and gather visibility metrics."""
 
     texture_path = settings.ensure_path(sheet_path)
     if not texture_path.is_file():
         # Fall back to dummy textures when the asset is not present.
         print(f"Missing sprite replaced: {texture_path.name}")
-        return {"right": [DUMMY_FRAME], "left": [DUMMY_FRAME]}
+        return (
+            {"right": [DUMMY_FRAME], "left": [DUMMY_FRAME]},
+            {
+                "max_visible_height": float(frame_size),
+                "frame_height_for_max": float(frame_size),
+                "max_visible_width": float(frame_size),
+                "frame_width_for_max": float(frame_size),
+                "min_bottom_margin": 0.0,
+                "frame_height_for_bottom": float(frame_size),
+            },
+        )
 
     frames_right: list[arcade.Texture] = []
     frames_left: list[arcade.Texture] = []
+    max_visible_height = 0.0
+    frame_height_for_max = float(frame_size)
+    max_visible_width = 0.0
+    frame_width_for_max = float(frame_size)
+    min_bottom_margin = float(frame_size)
+    frame_height_for_bottom = float(frame_size)
 
     with Image.open(texture_path) as sheet_image:
         sheet_img = sheet_image.convert("RGBA")
@@ -55,6 +71,27 @@ def load_sprite_sheet(
             left = frame_index * frame_size
             box = (left, 0, left + frame_size, sheet_height)
             frame_img = sheet_img.crop(box).copy()
+
+            alpha = frame_img.split()[-1]
+            bbox = alpha.getbbox()
+            if bbox:
+                visible_height = max(1, bbox[3] - bbox[1])
+                visible_width = max(1, bbox[2] - bbox[0])
+                bottom_margin = max(0, sheet_height - bbox[3])
+            else:
+                visible_height = sheet_height
+                visible_width = frame_size
+                bottom_margin = 0
+
+            if visible_height > max_visible_height:
+                max_visible_height = float(visible_height)
+                frame_height_for_max = float(sheet_height)
+            if visible_width > max_visible_width:
+                max_visible_width = float(visible_width)
+                frame_width_for_max = float(frame_size)
+            if bottom_margin < min_bottom_margin:
+                min_bottom_margin = float(bottom_margin)
+                frame_height_for_bottom = float(sheet_height)
 
             tex_r = arcade.Texture(
                 name=f"{texture_path.stem}_{frame_index}_R",
@@ -73,7 +110,25 @@ def load_sprite_sheet(
         frames_right = [DUMMY_FRAME]
         frames_left = [DUMMY_FRAME]
 
-    return {"right": frames_right, "left": frames_left}
+    if max_visible_height <= 0:
+        max_visible_height = float(sheet_height)
+        frame_height_for_max = float(sheet_height)
+    if max_visible_width <= 0:
+        max_visible_width = float(frame_size)
+        frame_width_for_max = float(frame_size)
+    if min_bottom_margin < 0:
+        min_bottom_margin = 0.0
+
+    metrics = {
+        "max_visible_height": max_visible_height,
+        "frame_height_for_max": frame_height_for_max,
+        "max_visible_width": max_visible_width,
+        "frame_width_for_max": frame_width_for_max,
+        "min_bottom_margin": min_bottom_margin,
+        "frame_height_for_bottom": frame_height_for_bottom,
+    }
+
+    return {"right": frames_right, "left": frames_left}, metrics
 
 
 class Fighter:
@@ -102,23 +157,34 @@ class Fighter:
         *,
         action_files: Optional[Mapping[str, str]] = None,
         frame_size: int = settings.FRAME_SIZE,
+        min_scale: float = settings.MIN_FIGHTER_SCALE,
+        max_scale: float = settings.MAX_FIGHTER_SCALE,
     ) -> None:
         self.spawn_x = x
-        self.spawn_y = y
-        self.w = settings.FIGHTER_WIDTH
-        self.h = settings.FIGHTER_HEIGHT
+        self.base_ground_y = y
         self.controls = controls
         self.name = name
         self.sprite_folder = settings.ensure_path(sprite_folder)
         self.action_files = {k.lower(): v for k, v in (action_files or {}).items()}
         self.frame_size = frame_size
         self.sounds = sounds
+        self.min_scale = min_scale
+        self.max_scale = max_scale
 
         self.animations: Dict[str, TextureBundle] = {}
         self.image: Optional[arcade.Texture] = None
+        self._max_visible_height = 0.0
+        self._frame_height_for_max = float(frame_size)
+        self._max_visible_width = 0.0
+        self._frame_width_for_max = float(frame_size)
+        self._min_bottom_margin = float("inf")
+        self._frame_height_for_bottom = float(frame_size)
+        self.w = settings.FIGHTER_WIDTH
+        self.h = settings.FIGHTER_HEIGHT
+        self.ground_y = self.base_ground_y
 
-        self.reset()
         self._load_textures()
+        self.reset()
 
     def _load_textures(self) -> None:
         actions = dict(self.ACTION_FILES)
@@ -126,13 +192,51 @@ class Fighter:
 
         for state, filename in actions.items():
             sheet_path = self.sprite_folder / filename
-            self.animations[state] = load_sprite_sheet(sheet_path, frame_size=self.frame_size)
+            textures, metrics = load_sprite_sheet(sheet_path, frame_size=self.frame_size)
+            if metrics["max_visible_height"] > self._max_visible_height:
+                self._max_visible_height = metrics["max_visible_height"]
+                self._frame_height_for_max = metrics["frame_height_for_max"]
+            if metrics["max_visible_width"] > self._max_visible_width:
+                self._max_visible_width = metrics["max_visible_width"]
+                self._frame_width_for_max = metrics["frame_width_for_max"]
+            if metrics["min_bottom_margin"] < self._min_bottom_margin:
+                self._min_bottom_margin = metrics["min_bottom_margin"]
+                self._frame_height_for_bottom = metrics["frame_height_for_bottom"]
+            self.animations[state] = textures
 
         self.image = self.animations["idle"]["right"][0]
+        self._update_dimensions()
+
+    def _update_dimensions(self) -> None:
+        if self._max_visible_height <= 0:
+            self._max_visible_height = float(self.frame_size)
+        if self._frame_height_for_max <= 0:
+            self._frame_height_for_max = float(self.frame_size)
+        if self._max_visible_width <= 0:
+            self._max_visible_width = float(self.frame_size)
+            self._frame_width_for_max = float(self.frame_size)
+        if self._frame_width_for_max <= 0:
+            self._frame_width_for_max = float(self.frame_size)
+        if self._frame_height_for_bottom <= 0:
+            self._frame_height_for_bottom = float(self.frame_size)
+
+        desired_visible_height = settings.FIGHTER_HEIGHT
+        raw_scale = desired_visible_height / self._max_visible_height
+        scale = max(self.min_scale, min(self.max_scale, raw_scale))
+
+        self.h = self._frame_height_for_max * scale
+        width_candidate = self._frame_width_for_max * scale
+        width_min = settings.FIGHTER_WIDTH * self.min_scale
+        width_max = settings.FIGHTER_WIDTH * self.max_scale
+        self.w = max(width_min, min(width_max, width_candidate))
+
+        bottom_margin = 0.0 if self._min_bottom_margin == float("inf") else self._min_bottom_margin
+        bottom_margin_scaled = bottom_margin * (self.h / max(1.0, self._frame_height_for_bottom))
+        self.ground_y = self.base_ground_y + self.h / 2 - bottom_margin_scaled
 
     def reset(self) -> None:
         self.x = self.spawn_x
-        self.y = self.spawn_y
+        self.y = self.ground_y
         self.vel_y = 0.0
         self.on_ground = True
         self.facing = 1 if self.spawn_x < settings.WIDTH // 2 else -1
@@ -147,6 +251,7 @@ class Fighter:
 
     def update(self, keys: Mapping[int, bool], opponent: "Fighter") -> None:
         if self.is_dead:
+            self.animate()
             return
 
         was_airborne = not self.on_ground
@@ -169,8 +274,8 @@ class Fighter:
 
         self.vel_y -= settings.GRAVITY
         self.y += self.vel_y
-        if self.y <= 150:
-            self.y = 150
+        if self.y <= self.ground_y:
+            self.y = self.ground_y
             self.vel_y = 0
             self.on_ground = True
             if self.state in ["jump", "fall"]:
@@ -244,6 +349,14 @@ class Fighter:
 
         if not frames:
             frames = [DUMMY_FRAME]
+
+        if self.state == "death":
+            self.frame_timer += 1
+            if self.frame_timer >= 5 and self.frame_index < len(frames) - 1:
+                self.frame_timer = 0
+                self.frame_index += 1
+            self.image = frames[min(self.frame_index, len(frames) - 1)]
+            return
 
         self.frame_timer += 1
         if self.frame_timer >= 5:
