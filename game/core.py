@@ -182,6 +182,8 @@ class Fighter:
         self.w = settings.FIGHTER_WIDTH
         self.h = settings.FIGHTER_HEIGHT
         self.ground_y = self.base_ground_y
+        
+        self._was_jump_pressed = False  # Track previous jump key state for edge detection
 
         self._load_textures()
         self.reset()
@@ -239,6 +241,7 @@ class Fighter:
         self.y = self.ground_y
         self.vel_y = 0.0
         self.on_ground = True
+        self.jumps_remaining = 2  # Allow double jump
         self.facing = 1 if self.spawn_x < settings.WIDTH // 2 else -1
         self.health = 100
         self.is_attacking = False
@@ -248,6 +251,7 @@ class Fighter:
         self.frame_timer = 0
         self.hit_flash_timer = 0
         self.invincible_timer = 0
+        self._was_jump_pressed = False
 
     def update(self, keys: Mapping[int, bool], opponent: "Fighter") -> None:
         if self.is_dead:
@@ -265,12 +269,17 @@ class Fighter:
 
         if not self.is_attacking:
             self.facing = 1 if self.x < opponent.x else -1
-            self.state = "run" if moving else "idle"
+            if self.on_ground:
+                self.state = "run" if moving else "idle"
 
-        if keys.get(self.controls["jump"], False) and self.on_ground:
+        # Check for jump key press (edge detection - only trigger on press, not while held)
+        is_jump_pressed = keys.get(self.controls["jump"], False)
+        if is_jump_pressed and not self._was_jump_pressed and self.jumps_remaining > 0:
             self.vel_y = settings.JUMP_SPEED
             self.on_ground = False
             self.state = "jump"
+            self.jumps_remaining -= 1
+        self._was_jump_pressed = is_jump_pressed
 
         self.vel_y -= settings.GRAVITY
         self.y += self.vel_y
@@ -278,10 +287,17 @@ class Fighter:
             self.y = self.ground_y
             self.vel_y = 0
             self.on_ground = True
+            self.jumps_remaining = 2  # Reset jumps when landing
             if self.state in ["jump", "fall"]:
                 self.state = "idle"
             if was_airborne:
                 self.cancel_attack()
+        elif (
+            self.vel_y < 0
+            and not self.is_attacking
+            and self.state not in ("take hit", "death")
+        ):
+            self.state = "fall"
 
         if keys.get(self.controls["punch"], False) and not self.is_attacking:
             self.state = "attack1"
@@ -304,7 +320,8 @@ class Fighter:
         if self.invincible_timer > 0:
             self.invincible_timer -= 1
 
-        self.x = max(self.w // 2, min(settings.WIDTH - self.w // 2, self.x))
+        half_width = self.w / 2
+        self.x = max(half_width, min(settings.WIDTH - half_width, self.x))
 
     def try_hit(self, opponent: "Fighter") -> None:
         if abs(self.x - opponent.x) < settings.ATTACK_RANGE and abs(self.y - opponent.y) < 100:

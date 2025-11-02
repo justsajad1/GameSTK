@@ -511,6 +511,8 @@ class StickmanFighterGame(arcade.Window):
             if self.state == "menu":
                 self._stop_music()
                 arcade.close_window()
+            elif self.state in ("options", "character_select"):
+                self.state = "menu"
             else:
                 self.back_to_menu()
             return
