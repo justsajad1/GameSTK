@@ -25,7 +25,9 @@ def _load_sounds() -> SoundMap:
         file_path = settings.ensure_path(configured_path)
         if file_path.is_file():
             print(f"{file_path.name} found")
-            sounds[key] = arcade.load_sound(str(file_path))
+            # Stream long-form tracks (e.g. background music) to avoid decoding issues on some systems.
+            stream = key == "music"
+            sounds[key] = arcade.load_sound(str(file_path), streaming=stream)
         else:
             print(f"{file_path.name} missing")
             sounds[key] = None
