@@ -8,7 +8,7 @@
 - Wie wird das Spiel bedient? (Tastaturbelegung)
 
   - Spieler 1: `A` / `D` bewegen, `W` springen, `F` Schlag 1, `G` Schlag 2, `H` Schlag 3 
-  - Spieler 2: Pfeiltasten bewegen, `Pfeil oben` springen, `0` Schlag 1, `1` Schlag 2, `1` Schlag 3
+  - Spieler 2: `Pfeiltasten` bewegen, `Pfeil oben` springen, `0` Schlag 1, `1` Schlag 2, `1` Schlag 3
   - `ESC` oeffnet das Menü; im Charakterauswahlmenü navigiert ihr mit der Maus.
 
 - Bekannte Einschraenkungen (Dinge, die nicht funktionieren):
