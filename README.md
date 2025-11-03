@@ -1,14 +1,14 @@
-# Der Kampf der Zwei Koenige
+# Das epische Duell
 
 ## Das Spiel
 - Kurze Beschreibung des Spiels:
 
-  In **Der Kampf der Zwei Koenige** treten zwei Spieler in einem lokalen Arcade-Fighting-Game gegeneinander an. Ihr waehlt aus einem Kader historisch inspirierter Kaempfer wie Tutankhamun, Charlemagne oder verschiedene Samurai und liefert euch schnelle Duelle. Jede Runde endet, sobald eine Lebensleiste leer ist; wer zuerst drei Runden gewinnt, entscheidet das Match fuer sich. Zwischen den Kaempfen koennt ihr im Menü die Arena (Tag oder Nacht) und eure Charaktere wechseln.
+  In **Das epische Duell** treten zwei Spieler in einem lokalen Arcade-Fighting-Game gegeneinander an. Ihr waehlt aus einem Kader historisch inspirierter Kaempfer wie Tutankhamun, Charlemagne oder verschiedene Samurai und liefert euch schnelle Duelle. Jede Runde endet, sobald eine Lebensleiste leer ist; wer zuerst drei Runden gewinnt, entscheidet das Match fuer sich. Zwischen den Kaempfen koennt ihr im Menü die Arena (Tag oder Nacht) und eure Charaktere wechseln.
 
 - Wie wird das Spiel bedient? (Tastaturbelegung)
 
-  - Spieler 1: `A` / `D` bewegen, `W` springen, `F` Schlag, `G` Tritt
-  - Spieler 2: Pfeiltasten bewegen, `Pfeil oben` springen, `0` Schlag, `1` Tritt (Numpad oder obere Zahlenreihe)
+  - Spieler 1: `A` / `D` bewegen, `W` springen, `F` Schlag 1, `G` Schlag 2, `H` Schlag 3 
+  - Spieler 2: Pfeiltasten bewegen, `Pfeil oben` springen, `0` Schlag 1, `1` Schlag 2, `1` Schlag 3
   - `ESC` oeffnet das Menü; im Charakterauswahlmenü navigiert ihr mit der Maus.
 
 - Bekannte Einschraenkungen (Dinge, die nicht funktionieren):
@@ -18,21 +18,21 @@
 
 - Screenshot des Spiels
 
-  ![Screenshot des Spiels](./assets/image_files/choose_arena.jpg)
+  ![Screenshot des Spiels](./assets/image_files/readmeimg.jpg)
 
 ## Installation
 1. Voraussetzungen: Python 3.10 oder neuer sowie `pip`.
 2. (Optional) Virtuelle Umgebung erstellen und aktivieren.
 3. Abhaengigkeiten installieren: `python -m pip install -r requirements.txt`
-4. Spiel starten: `python -m game.main`
+4. Spiel starten: `python3 main.py`
 
 ## Kurze Zusammenfassung des Projekts
 - Lokales 2D-Fighting-Game als Softwareprojekt am Studienkolleg.
 - Fokus auf animierte Kampfsprites, Soundeffekte und verschiedene Kampfstile.
 - Menüfluss fuer Spielstart, Optionen, Charakterauswahl und Matchauswertung.
 
-## Team
--: Entwicklung, Game- und Sound-Integration.
+## Team Society
+-: Sajad, Eddy und Vinh: Entwicklung, Game- und Sound-Integration.
 
 ## Weitere Informationen zum Projekt
 - [Storyboard](docs/Storyboard.pdf)
