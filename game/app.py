@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Dict, Mapping, Optional
 
 import arcade
 from arcade.types.rect import XYWH
@@ -38,6 +38,8 @@ def _load_sounds() -> SoundMap:
 class StickmanFighterGame(arcade.Window):
     """Main game window managing menu, match flow, and rendering."""
 
+    CONTROL_ACTIONS = ("left", "right", "jump", "punch", "kick", "special")
+
     def __init__(self) -> None:
         super().__init__(
             settings.WIDTH,
@@ -47,31 +49,29 @@ class StickmanFighterGame(arcade.Window):
             update_rate=1 / settings.FPS,
         )
 
-        self.state = "menu"  # "menu" | "options" | "character_select" | "playing" | "round_over" | "match_over"
+        self.state = "menu"  # menu | options | character_select | playing | round_over | match_over
         self.mode: Optional[str] = None  # "day" | "night"
         self.round_restart_timer = 0
         self.match_restart_timer = 0
         self.camera_offset = 0.0
+        self.round_time_remaining = float(settings.ROUND_TIME_LIMIT)
+        self.round_message = ""
 
         self.background: Optional[arcade.Texture] = None
         self.sounds = _load_sounds()
         self.music_player: Optional[object] = None
         self._start_music_loop()
 
-        self.controls1 = {
-            "left": settings.key_code("A"),
-            "right": settings.key_code("D"),
-            "jump": settings.key_code("W"),
-            "punch": settings.key_code("F"),
-            "kick": settings.key_code("G"),
-        }
-        self.controls2 = {
-            "left": settings.key_code("LEFT"),
-            "right": settings.key_code("RIGHT"),
-            "jump": settings.key_code("UP"),
-            "punch": settings.key_code("NUM_0", "NUMPAD_0", "KP_0", default=ord("0")),
-            "kick": settings.key_code("NUM_1", "NUMPAD_1", "KP_1", default=ord("1")),
-        }
+        default_controls = {player: dict(bindings) for player, bindings in settings.PLAYER_CONTROLS.items()}
+        configured = getattr(settings, "PLAYER_CONTROLS", {})
+        self.controls1 = self._normalize_player_controls(
+            configured.get("player1", {}),
+            default_controls.get("player1", {}),
+        )
+        self.controls2 = self._normalize_player_controls(
+            configured.get("player2", {}),
+            default_controls.get("player2", {}),
+        )
 
         self.fighter_catalog = settings.FIGHTERS
         self.fighter_keys = list(self.fighter_catalog.keys())
@@ -85,6 +85,28 @@ class StickmanFighterGame(arcade.Window):
         self.score1 = 0
         self.score2 = 0
         self._text_objects: Dict[str, arcade.Text] = {}
+
+    def _normalize_player_controls(
+        self,
+        configured: Mapping[str, int],
+        defaults: Mapping[str, int],
+    ) -> Dict[str, int]:
+        normalized: Dict[str, int] = {}
+        used_keys: Dict[int, str] = {}
+        default_sequence = [defaults[action] for action in self.CONTROL_ACTIONS]
+
+        for action in self.CONTROL_ACTIONS:
+            desired = configured.get(action, defaults[action])
+            candidates = [desired] + default_sequence
+            chosen = desired
+            for candidate in candidates:
+                if candidate not in used_keys:
+                    chosen = candidate
+                    break
+            normalized[action] = chosen
+            used_keys[chosen] = action
+
+        return normalized
 
     def _start_music_loop(self) -> None:
         """Begin background music playback if an asset is available."""
@@ -115,6 +137,124 @@ class StickmanFighterGame(arcade.Window):
             delete()
         self.music_player = None
 
+    def pause_game(self) -> None:
+        """Suspend gameplay while preserving the current round state."""
+
+        if self.state != "playing":
+            return
+
+        self.state = "paused"
+        self.keys.clear()
+
+    def resume_game(self) -> None:
+        """Return to active gameplay from a paused state."""
+
+        if self.state != "paused":
+            return
+
+        self.state = "playing"
+
+    def _handle_round_timeout(self) -> None:
+        """Resolve the round outcome when the time limit expires."""
+
+        if self.state != "playing":
+            return
+
+        self.round_time_remaining = 0.0
+        health1 = max(0, self.fighter1.health)
+        health2 = max(0, self.fighter2.health)
+        if health1 == health2:
+            self._finish_draw_round(reason="timeout")
+            return
+
+        round_winner = self.fighter1 if health1 > health2 else self.fighter2
+        self.finish_round(round_winner, reason="timeout")
+
+    def _finish_draw_round(self, *, reason: str = "timeout") -> None:
+        """Resolve round flow when neither player wins."""
+
+        both_on_match_point = (
+            self.score1 == settings.WINS_TO_MATCH - 1 and self.score2 == settings.WINS_TO_MATCH - 1
+        )
+        message_prefix = "Zeit abgelaufen! " if reason == "timeout" else ""
+
+        if both_on_match_point:
+            self.round_message = f"{message_prefix}Unentschieden – keine Punkte vergeben."
+        else:
+            self.score1 += 1
+            self.score2 += 1
+            self.round_message = f"{message_prefix}Unentschieden – beide Spieler erhalten einen Punkt."
+
+        self.round_time_remaining = max(0.0, self.round_time_remaining)
+
+        if not both_on_match_point and (
+            self.score1 >= settings.WINS_TO_MATCH or self.score2 >= settings.WINS_TO_MATCH
+        ):
+            self.state = "match_over"
+            if self.score1 == self.score2:
+                self.winner = "Gleichstand"
+            else:
+                self.winner = self.fighter1.name if self.score1 > self.score2 else self.fighter2.name
+            self.match_restart_timer = int(4 * settings.FPS)
+            return
+
+        self.state = "round_over"
+        self.winner = None
+        self.round_restart_timer = int(3 * settings.FPS)
+
+    def _resolve_player_overlap(self) -> None:
+        """Prevent fighters from clipping through each other by enforcing minimum spacing."""
+
+        fighter1 = self.fighter1
+        fighter2 = self.fighter2
+
+        if fighter1.is_dead or fighter2.is_dead:
+            return
+
+        if abs(fighter1.y - fighter2.y) > settings.VERTICAL_SEPARATION_THRESHOLD:
+            return
+
+        left, right = (fighter1, fighter2) if fighter1.x <= fighter2.x else (fighter2, fighter1)
+        collision_span = left.collision_half_width + right.collision_half_width
+        min_distance = max(settings.MIN_PLAYER_DISTANCE, collision_span)
+        current_distance = right.x - left.x
+
+        if current_distance >= min_distance - settings.TOUCH_TOLERANCE:
+            return
+
+        target_distance = min_distance
+        overlap = target_distance - current_distance
+        if overlap <= 0:
+            return
+
+        left_min = left.w / 2
+        right_max = settings.WIDTH - right.w / 2
+        left_available = max(0.0, left.x - left_min)
+        right_available = max(0.0, right_max - right.x)
+
+        half_overlap = overlap / 2
+        left_shift = min(half_overlap, left_available)
+        right_shift = min(half_overlap, right_available)
+
+        remaining = overlap - (left_shift + right_shift)
+
+        if remaining > 0 and left_available > left_shift:
+            extra_left = min(remaining, left_available - left_shift)
+            left_shift += extra_left
+            remaining -= extra_left
+
+        if remaining > 0 and right_available > right_shift:
+            extra_right = min(remaining, right_available - right_shift)
+            right_shift += extra_right
+            remaining -= extra_right
+
+        left.x -= left_shift
+        right.x += right_shift
+
+        for fighter in (left, right):
+            half_width = fighter.w / 2
+            fighter.x = max(half_width, min(settings.WIDTH - half_width, fighter.x))
+
     def _create_fighter(self, slot: str) -> core.Fighter:
         """Instantiate a fighter for the given player slot based on the current selection."""
 
@@ -139,6 +279,8 @@ class StickmanFighterGame(arcade.Window):
             sprite_dir,
             self.sounds,
             action_files=action_files,
+            attack_specs=config.get("attack_specs"),
+            attack_effects=config.get("attack_effects", {}),
             frame_size=frame_size,
             min_scale=config.get("min_scale", settings.MIN_FIGHTER_SCALE),
             max_scale=config.get("max_scale", settings.MAX_FIGHTER_SCALE),
@@ -317,13 +459,22 @@ class StickmanFighterGame(arcade.Window):
         self.state = "playing"
         self.winner = None
         self.round_restart_timer = 0
+        self.round_time_remaining = float(settings.ROUND_TIME_LIMIT)
+        self.round_message = ""
 
-    def finish_round(self, round_winner: core.Fighter) -> None:
+    def finish_round(self, round_winner: core.Fighter, *, reason: str = "knockout") -> None:
         """Update scores, move to next round or mark the match finished."""
+        self.round_time_remaining = max(0.0, self.round_time_remaining)
         if round_winner is self.fighter1:
             self.score1 += 1
         else:
             self.score2 += 1
+
+        winner_name = round_winner.name
+        if reason == "timeout":
+            self.round_message = f"{winner_name} gewinnt durch Zeitablauf!"
+        else:
+            self.round_message = f"{winner_name} hat die Runde gewonnen!"
 
         if self.score1 >= settings.WINS_TO_MATCH or self.score2 >= settings.WINS_TO_MATCH:
             self.state = "match_over"
@@ -331,7 +482,7 @@ class StickmanFighterGame(arcade.Window):
             self.match_restart_timer = int(4 * settings.FPS)
         else:
             self.state = "round_over"
-            self.winner = round_winner.name
+            self.winner = winner_name
             self.round_restart_timer = int(3 * settings.FPS)
 
     def restart_round(self) -> None:
@@ -406,6 +557,20 @@ class StickmanFighterGame(arcade.Window):
             color = settings.WHITE if i < self.score2 else (150, 150, 150)
             arcade.draw_circle_filled(cx, cy, pip_r, color)
 
+        remaining = max(0.0, self.round_time_remaining)
+        seconds_left = max(0, int(math.ceil(remaining)))
+        timer_text = f"{seconds_left}"
+        self._draw_text(
+            "hud_timer",
+            timer_text,
+            settings.WIDTH / 2,
+            settings.HEIGHT - 38,
+            settings.WHITE,
+            28,
+            anchor_x="center",
+            bold=True,
+        )
+
         if self.mode:
             mode_text = {"day": "TAG", "night": "NACHT"}.get(self.mode, "")
             if mode_text:
@@ -449,9 +614,10 @@ class StickmanFighterGame(arcade.Window):
         self.draw_hud()
 
         if self.state == "round_over":
+            message = self.round_message or "Runde beendet!"
             self._draw_text(
                 "round_over_title",
-                f"{self.winner} hat die Runde gewonnen!",
+                message,
                 settings.WIDTH / 2,
                 settings.HEIGHT / 2 + 40,
                 settings.WHITE,
@@ -488,15 +654,66 @@ class StickmanFighterGame(arcade.Window):
                 18,
                 anchor_x="center",
             )
+        elif self.state == "paused":
+            arcade.draw_lrbt_rectangle_filled(
+                0,
+                settings.WIDTH,
+                0,
+                settings.HEIGHT,
+                (0, 0, 0, 160),
+            )
+            self._draw_text(
+                "paused_title",
+                "PAUSE",
+                settings.WIDTH / 2,
+                settings.HEIGHT / 2 + 60,
+                settings.WHITE,
+                48,
+                anchor_x="center",
+                bold=True,
+            )
+            self._draw_text(
+                "paused_resume_hint",
+                "ESC oder P = Fortsetzen",
+                settings.WIDTH / 2,
+                settings.HEIGHT / 2 + 10,
+                settings.WHITE,
+                22,
+                anchor_x="center",
+            )
+            self._draw_text(
+                "paused_restart_hint",
+                "R = Runde neu starten",
+                settings.WIDTH / 2,
+                settings.HEIGHT / 2 - 30,
+                settings.WHITE,
+                18,
+                anchor_x="center",
+            )
+            self._draw_text(
+                "paused_menu_hint",
+                "M = Hauptmenue",
+                settings.WIDTH / 2,
+                settings.HEIGHT / 2 - 60,
+                settings.WHITE,
+                18,
+                anchor_x="center",
+            )
 
     def on_update(self, delta_time: float) -> None:  # noqa: D401 - Arcade signature
         if self.state == "playing":
             self.fighter1.update(self.keys, self.fighter2)
             self.fighter2.update(self.keys, self.fighter1)
+            self._resolve_player_overlap()
 
             if self.fighter1.is_dead or self.fighter2.is_dead:
                 round_winner = self.fighter2 if self.fighter1.is_dead else self.fighter1
                 self.finish_round(round_winner)
+                return
+
+            self.round_time_remaining = max(0.0, self.round_time_remaining - delta_time)
+            if self.round_time_remaining <= 0:
+                self._handle_round_timeout()
             return
 
         if self.state == "round_over" and self.round_restart_timer > 0:
@@ -515,7 +732,21 @@ class StickmanFighterGame(arcade.Window):
                 arcade.close_window()
             elif self.state in ("options", "character_select"):
                 self.state = "menu"
+            elif self.state == "playing":
+                self.pause_game()
+            elif self.state == "paused":
+                self.resume_game()
             else:
+                self.back_to_menu()
+            return
+
+        if self.state == "paused":
+            enter_keys = (settings.KEY.ENTER, getattr(settings.KEY, "RETURN", settings.KEY.ENTER))
+            if symbol in enter_keys or symbol == settings.KEY.P:
+                self.resume_game()
+            elif symbol == settings.KEY.R:
+                self.restart_round()
+            elif symbol == settings.KEY.M:
                 self.back_to_menu()
             return
 
@@ -558,6 +789,10 @@ class StickmanFighterGame(arcade.Window):
                 self.start_match()
             elif symbol == settings.KEY.M:
                 self.back_to_menu()
+            return
+
+        if self.state == "playing" and symbol == settings.KEY.P:
+            self.pause_game()
             return
 
         self.keys[symbol] = True
@@ -722,25 +957,6 @@ class StickmanFighterGame(arcade.Window):
                 anchor_x="center",
                 anchor_y="center",
             )
-
-        self._draw_text(
-            "options_hint",
-            "Waehle die Arena-Beleuchtung. Bestaetige mit ESC fuer das Menue.",
-            settings.WIDTH / 2,
-            settings.HEIGHT / 2 - 120,
-            (200, 200, 200),
-            14,
-            anchor_x="center",
-        )
-        self._draw_text(
-            "options_escape_hint",
-            "M kehrt ebenfalls zum Menue zurueck",
-            settings.WIDTH / 2,
-            settings.HEIGHT / 2 - 150,
-            (180, 180, 180),
-            12,
-            anchor_x="center",
-        )
 
     def on_close(self) -> None:
         self._stop_music()

@@ -7,6 +7,11 @@ from typing import Any
 
 import arcade
 
+try:
+    KEY = arcade.key  # type: ignore[attr-defined]
+except AttributeError:  # pragma: no cover - compatibility path
+    from pyglet.window import key as KEY  # type: ignore
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -38,7 +43,7 @@ WIDTH, HEIGHT = 1280, 720
 FPS = 60
 PLAYER_SPEED = 6
 JUMP_SPEED = 15
-GRAVITY = 0.9
+GRAVITY = 0.7
 ATTACK_RANGE = 120
 DAMAGE = 20
 FRAME_SIZE = 162
@@ -50,35 +55,64 @@ HIT_FLASH_DURATION = 10
 WINS_TO_MATCH = 3  # First to 3 wins the match
 WINDOW_TITLE = "Der Kampf der Zwei Koenige"
 GROUND_Y = 150
+ROUND_TIME_LIMIT = 60.0  # Seconds allotted per round
+DEFAULT_FRAME_INTERVAL = 5  # Update steps between animation frames when timing is generic
+ATTACK_ANIMATION_DURATION = 0.5  # Seconds a basic attack animation (and hit lockout) should last
+MIN_PLAYER_DISTANCE = 0  # Baseline horizontal spacing preserved between fighters
+VERTICAL_SEPARATION_THRESHOLD = 140  # Vertical gap above which fighters no longer push apart
+COLLISION_SCALE = 0.45  # Multiplier applied to a sprite's visible width to determine collision width
+COLLISION_MIN_WIDTH = 28  # Minimum collision width used for very narrow sprites
+TOUCH_TOLERANCE = 4  # Allowable overlap before fighters are pushed apart
+HIT_HORIZONTAL_BUFFER = 14  # Extra reach added to collision span when validating hits
+HIT_VERTICAL_TOLERANCE = 120  # Vertical gap within which hits may register
+FIGHTER_TEXTURE_UPSCALE = 2.0  # Multiplier applied to sprite frames before textures are created
+FIGHTER_TEXTURE_MAX_DIMENSION = 768  # Prevent runaway upscale for large source art (0 disables the guard)
+FIGHTER_TEXTURE_SHARPEN_PERCENT = 110  # Amount for unsharp mask after upscaling (0 disables sharpening)
+FIGHTER_TEXTURE_SHARPEN_RADIUS = 1.2  # Unsharp mask radius for sprite enhancement
+FIGHTER_TEXTURE_SHARPEN_THRESHOLD = 3  # Threshold passed to the unsharp mask filter
+
+ATTACK_PROFILES = {
+    "attack1": {
+        "damage": 20,
+        "cooldown": 1.0 / 3.0,
+        "hit_frame_ratio": 0.4,
+    },
+    "attack2": {
+        "damage": 30,
+        "cooldown": 0.5,
+        "hit_frame_ratio": 0.5,
+    },
+    "attack3": {
+        "damage": 45,
+        "cooldown": 1.0,
+        "hit_frame_ratio": 0.6,
+    },
+}
+
+PLAYER_CONTROLS = {
+    "player1": {
+        "left": getattr(KEY, "A", ord("A")),
+        "right": getattr(KEY, "D", ord("D")),
+        "jump": getattr(KEY, "W", ord("W")),
+        "punch": getattr(KEY, "F", ord("F")),
+        "kick": getattr(KEY, "G", ord("G")),
+        "special": getattr(KEY, "H", ord("H")),
+    },
+    "player2": {
+        "left": getattr(KEY, "LEFT", getattr(KEY, "A", ord("A"))),
+        "right": getattr(KEY, "RIGHT", getattr(KEY, "D", ord("D"))),
+        "jump": getattr(KEY, "UP", getattr(KEY, "W", ord("W"))),
+        "punch": getattr(KEY, "NUM_0", getattr(KEY, "NUMPAD_0", getattr(KEY, "KP_0", ord("0")))),
+        "kick": getattr(KEY, "NUM_1", getattr(KEY, "NUMPAD_1", getattr(KEY, "KP_1", ord("1")))),
+        "special": getattr(KEY, "NUM_2", getattr(KEY, "NUMPAD_2", getattr(KEY, "KP_2", ord("2")))),
+    },
+}
 
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 GROUND = (34, 139, 34)
 HUD_BG = (0, 0, 0, 160)
-
-try:
-    KEY = arcade.key  # type: ignore[attr-defined]
-except AttributeError:  # pragma: no cover - compatibility path
-    from pyglet.window import key as KEY  # type: ignore
-
-
-def key_code(*names: str, default: int | None = None) -> int:
-    """Resolve a key code with graceful fallbacks for pyglet naming changes."""
-
-    for name in names:
-        candidate = getattr(KEY, name, None)
-        if candidate is not None:
-            return candidate
-    if default is not None:
-        return default
-    if names:
-        fallback = names[0]
-        # Allow simple ASCII fallback if provided, e.g. "A" -> ord("A")
-        if len(fallback) == 1:
-            return getattr(KEY, fallback.upper(), ord(fallback))
-    raise AttributeError(f"Key code not available for any of: {', '.join(names)}")
-
 
 SOUND_FILES = {
     "music": asset_path("sounds", "music.mp3"),
@@ -211,6 +245,18 @@ __all__ = [
     "HIT_FLASH_DURATION",
     "WINS_TO_MATCH",
     "WINDOW_TITLE",
+    "ROUND_TIME_LIMIT",
+    "DEFAULT_FRAME_INTERVAL",
+    "ATTACK_ANIMATION_DURATION",
+    "MIN_PLAYER_DISTANCE",
+    "VERTICAL_SEPARATION_THRESHOLD",
+    "COLLISION_SCALE",
+    "COLLISION_MIN_WIDTH",
+    "TOUCH_TOLERANCE",
+    "HIT_HORIZONTAL_BUFFER",
+    "HIT_VERTICAL_TOLERANCE",
+    "ATTACK_PROFILES",
+    "PLAYER_CONTROLS",
     "ASSETS_DIR",
     "WHITE",
     "RED",
@@ -224,5 +270,4 @@ __all__ = [
     "base_path",
     "asset_path",
     "ensure_path",
-    "key_code",
 ]
