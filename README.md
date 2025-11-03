@@ -18,7 +18,7 @@
 
 - Screenshot des Spiels
 
-  ![Screenshot des Spiels](./assets/image_files/readmeimg.jpg)
+  ![Screenshot des Spiels](./assets/image_files/readmeimg.png)
 
 ## Installation
 1. Voraussetzungen: Python 3.10 oder neuer sowie `pip`.
