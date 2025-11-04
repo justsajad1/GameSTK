@@ -1,4 +1,4 @@
-"""Entrypoint for Der Kampf der Zwei Koenige."""
+"""The Battle of Empires"""
 
 from __future__ import annotations
 

@@ -53,7 +53,7 @@ MIN_FIGHTER_SCALE = 0.9
 MAX_FIGHTER_SCALE = 1.4
 HIT_FLASH_DURATION = 10
 WINS_TO_MATCH = 3  # First to 3 wins the match
-WINDOW_TITLE = "Der Kampf der Zwei Koenige"
+WINDOW_TITLE = "The Battle of Empires"
 GROUND_Y = 150
 ROUND_TIME_LIMIT = 60.0  # Seconds allotted per round
 DEFAULT_FRAME_INTERVAL = 5  # Update steps between animation frames when timing is generic
@@ -67,9 +67,6 @@ HIT_HORIZONTAL_BUFFER = 14  # Extra reach added to collision span when validatin
 HIT_VERTICAL_TOLERANCE = 120  # Vertical gap within which hits may register
 FIGHTER_TEXTURE_UPSCALE = 2.0  # Multiplier applied to sprite frames before textures are created
 FIGHTER_TEXTURE_MAX_DIMENSION = 768  # Prevent runaway upscale for large source art (0 disables the guard)
-FIGHTER_TEXTURE_SHARPEN_PERCENT = 110  # Amount for unsharp mask after upscaling (0 disables sharpening)
-FIGHTER_TEXTURE_SHARPEN_RADIUS = 1.2  # Unsharp mask radius for sprite enhancement
-FIGHTER_TEXTURE_SHARPEN_THRESHOLD = 3  # Threshold passed to the unsharp mask filter
 
 ATTACK_PROFILES = {
     "attack1": {

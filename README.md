@@ -1,9 +1,9 @@
-# Das epische Duell
+# The Battle of Empires
 
 ## Das Spiel
 - Kurze Beschreibung des Spiels:
 
-  In **Das epische Duell** treten zwei Spieler in einem lokalen Arcade-Fighting-Game gegeneinander an. Ihr waehlt aus einem Kader historisch inspirierter Kaempfer wie Tutankhamun, Charlemagne oder verschiedene Samurai und liefert euch schnelle Duelle. Jede Runde endet, sobald eine Lebensleiste leer ist; wer zuerst drei Runden gewinnt, entscheidet das Match fuer sich. Zwischen den Kaempfen koennt ihr im Menü die Arena (Tag oder Nacht) und eure Charaktere wechseln.
+  In **The Battle of Empires** treten zwei Spieler in einem lokalen Arcade-Fighting-Game gegeneinander an. Ihr waehlt aus einem Kader historisch inspirierter Kaempfer wie Tutankhamun, Charlemagne oder verschiedene Samurai und liefert euch schnelle Duelle. Jede Runde endet, sobald eine Lebensleiste leer ist; wer zuerst drei Runden gewinnt, entscheidet das Match fuer sich. Zwischen den Kaempfen koennt ihr im Menü die Arena (Tag oder Nacht) und eure Charaktere wechseln.
 
 - Wie wird das Spiel bedient? (Tastaturbelegung)
 

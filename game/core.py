@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 
 import arcade
 from arcade.types.rect import XYWH
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 try:  # Allow running both as a module and as a script alongside the other files.
     from . import settings  # type: ignore
@@ -100,9 +100,6 @@ def load_sprite_sheet(
 
     upscale_factor = float(getattr(settings, "FIGHTER_TEXTURE_UPSCALE", 1.0))
     max_dimension = float(getattr(settings, "FIGHTER_TEXTURE_MAX_DIMENSION", 0.0))
-    sharpen_percent = float(getattr(settings, "FIGHTER_TEXTURE_SHARPEN_PERCENT", 0.0))
-    sharpen_radius = float(getattr(settings, "FIGHTER_TEXTURE_SHARPEN_RADIUS", 0.0))
-    sharpen_threshold = int(getattr(settings, "FIGHTER_TEXTURE_SHARPEN_THRESHOLD", 0))
 
     try:
         resample_high = Image.Resampling.LANCZOS  # type: ignore[attr-defined]
@@ -142,14 +139,6 @@ def load_sprite_sheet(
                 new_width = max(1, int(round(processed_frame.width * target_scale)))
                 new_height = max(1, int(round(processed_frame.height * target_scale)))
                 processed_frame = processed_frame.resize((new_width, new_height), resample=resample_high)
-            if sharpen_percent > 0 and processed_frame.width > 1 and processed_frame.height > 1:
-                processed_frame = processed_frame.filter(
-                    ImageFilter.UnsharpMask(
-                        radius=max(0.0, float(sharpen_radius)),
-                        percent=max(0, int(round(sharpen_percent))),
-                        threshold=max(0, int(sharpen_threshold)),
-                    )
-                )
             frame_img = processed_frame
 
             if visible_height > max_visible_height:
