@@ -263,7 +263,7 @@ Hier berichte ich (Sajad) Lead-Developer (unterstützt von Eddy und Vinh) über 
 
   **Prompt für Kollisionsauflösung (Claude):**
   
-  _"Bei gleichzeitigen Vorwärtseingaben laufen meine Kämpfer ineinander. Wie kann ich in Arcade den Mindestabstand erzwingen, ohne dass jemand durch die Bildschirmränder geclippt wird?"_
+  _"Bei gleichzeitigen Vorwärtseingaben laufen meine Kämpfer ineinander. Wie kann ich in Arcade den Mindestabstand erzwingen?"_
   
   **Ergebnis:**
   ```python
@@ -296,9 +296,14 @@ Hier berichte ich (Sajad) Lead-Developer (unterstützt von Eddy und Vinh) über 
   }
   ```
 
-* **Wie wurden die KI-Vorschläge in den Source-Code integriert?**  
-  - Jeder Vorschlag diente nur als Ausgangspunkt: Wir übernahmen die Struktur, passten aber Variablennamen, States und Asset-Handling an unsere Codebasis an.  
-  - Nach jeder KI-generierten Änderung liefen kurze Tests (Spielstart, Wechsel zwischen Modi, komplette Matches), um Regressionen sofort zu erkennen.  
-  - Vorschläge mit falschen Arcade-Konstanten oder veraltetem API-Wissen wurden verworfen; stattdessen fragten wir gezielt nach neueren Versionen oder ergänzten eigene Kontextcodes in den Prompt.  
-  - Kombination mehrerer KI-Ideen (z. B. Claude-Hinweis zum Texture-Filter + Codex-Loop) beschleunigte Experimente, aber der finale Merge erfolgte immer nach manuellem Code-Review.  
-  - Dokumentation der Änderungen erfolgte in Commit-Nachrichten und dieser Implementierungsbeschreibung, damit das Team die Herkunft einzelner Lösungen nachvollziehen kann.
+**Integration der KI‑Vorschläge**
+
+Vorschläge dienten als Ausgangspunkt; Struktur wurde übernommen, Variablennamen, States und Asset‑Handling an die Codebasis angepasst.
+
+- Nach jeder KI‑Änderung testeten wir kurz (Spielstart, Moduswechsel, komplette Matches), um Regressionen früh zu erkennen.
+
+- Vorschläge mit falschen Arcade‑Konstanten oder veraltetem API‑Wissen wurden verworfen; bei Bedarf fragten wir gezielt nach neueren Versionen oder ergänzten Kontextcode im Prompt.
+
+- Die Kombination mehrerer KI‑Ideen (z. B. Texture‑Filter‑Hinweis von Claude + Loop‑Gerüst von Codex) beschleunigte Experimente; der finale Merge erfolgte stets nach manuellem Code‑Review.
+
+- Änderungen wurden in Commit‑Nachrichten dokumentiert.

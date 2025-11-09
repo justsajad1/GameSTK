@@ -4,8 +4,8 @@ Dieses Dokument haelt fest, wie wir KI-gestuetzte Werkzeuge im Arcade-Fighting-G
 
 ## Verwendete KI-Tools
 
-- **ChatGPT 4o**: Unterstuetzung bei Architekturfragen rund um `arcade.Window` sowie bei der Formulierung von Zustandsablaeufen und Timings.
-- **Claude 3.5 Sonnet**: Review von Kampfmechaniken, Balancing-Vorschlaegen und alternativen Datenstrukturen fuer Angriffsdefinitionen.
+- **ChatGPT 5 (Codex)**: Unterstuetzung bei Architekturfragen rund um `arcade.Window` sowie bei der Formulierung von Zustandsablaeufen und Timings.
+- **Claude Sonnet und Gemini**: Review von Kampfmechaniken, Balancing-Vorschlaegen und alternativen Datenstrukturen fuer Angriffsdefinitionen.
 - **GitHub Copilot**: Inline-Hinweise beim Ausformulieren von Python-Methoden, z. B. fuer Sprite-Management und Eingabelogik.
 
 ## Beispiel-Prompts
@@ -42,46 +42,34 @@ We need timers for round restarts and a text overlay when a round winner is deci
         self.round_message = ""
 ```
 
-### Beispiel 2: Tastaturbelegungen konfliktfrei normalisieren
+### Beispiel 2: Spielerueberlappung mit Randbedingungen aufloesen
 
-**Kontext:** Zwei Spieler teilen sich eine Tastatur. Wir wollten vermeiden, dass automatisch importierte Belegungen kollidieren, wenn ein Key doppelt vergeben ist.
+**Kontext:** Wenn beide Kaempfer gleichzeitig nach innen druecken, ueberlappen sich die Hitboxen und Figuren rutschen durch die Kamera. Wir brauchten eine robuste Aufteilung, die Restabstaende und Bildschirmraender respektiert.
 
 **Prompt:**
 ```
-Given a dict of desired key bindings for actions ["left","right","jump","punch","kick","special"], 
-write a Python helper that walks through the desired keys and falls back to defaults if a key is already taken.
-Return a normalized dict and keep the order of actions stable.
+In a 2P arcade fighter we track fighter.x, fighter.width, and a MIN_PLAYER_DISTANCE.
+Design a helper _resolve_player_overlap() that:
+- detects when fighters get closer than the min distance (consider collision widths),
+- divides the overlap evenly, but clamps to the available space on each side,
+- redistributes any remaining pixels so no one clips outside the screen.
+Return early if fighters are vertically far apart or one is KO'ed.
 ```
 
 **Ergebnis (Auszug):**
 ```
-def normalize_bindings(desired, defaults, actions):
-    normalized = {}
-    used = set()
-    for action in actions:
-        preferred = desired.get(action, defaults[action])
-        for candidate in [preferred] + [defaults[a] for a in actions]:
-            if candidate not in used:
-                normalized[action] = candidate
-                used.add(candidate)
-                break
-    return normalized
+left, right = sort_by_x(f1, f2)
+min_distance = max(MIN_PLAYER_DISTANCE, left.hw + right.hw)
+overlap = min_distance - (right.x - left.x)
+half = overlap / 2
+left_shift = min(half, left.available_space_to_left_edge())
+right_shift = min(half, right.available_space_to_right_edge())
+shift_remaining_pixels_across_both_sides()
+left.x -= left_shift
+right.x += right_shift
 ```
 
-**Verwendung im Projekt:** Die Rueckmeldung wurde in `_normalize_player_controls` umgesetzt, das Konflikte behebt und Defaults bewahrt.
-
-```python
-        for action in self.CONTROL_ACTIONS:
-            desired = configured.get(action, defaults[action])
-            candidates = [desired] + default_sequence
-            chosen = desired
-            for candidate in candidates:
-                if candidate not in used_keys:
-                    chosen = candidate
-                    break
-            normalized[action] = chosen
-            used_keys[chosen] = action
-```
+**Verwendung im Projekt:** Das Muster wurde direkt in `_resolve_player_overlap` (`game/app.py:205`) uebernommen. Die Routine verteilt die Verschiebung, prueft zuerst vertikale Trennung sowie KO-Zustaende und sorgt anschliessend dafuer, dass beide Kaempfer trotz Restueberlappung innerhalb `settings.WIDTH` bleiben.
 
 ### Beispiel 3: Spritesheets robuster importieren
 

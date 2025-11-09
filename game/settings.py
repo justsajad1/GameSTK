@@ -218,8 +218,8 @@ FIGHTERS: dict[str, dict[str, Any]] = {
 }
 
 DEFAULT_FIGHTER_SELECTION = {
-    "player1": "tutankhamun",
-    "player2": "charlemagne",
+    "player1": "samurai_commander",
+    "player2": "samurai_archer",
 }
 
 

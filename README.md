@@ -8,7 +8,7 @@
 - Wie wird das Spiel bedient? (Tastaturbelegung)
 
   - Spieler 1: `A` / `D` bewegen, `W` springen, `F` Schlag 1, `G` Schlag 2, `H` Schlag 3 
-  - Spieler 2: `Pfeiltasten` bewegen, `Pfeil oben` springen, `0` Schlag 1, `1` Schlag 2, `2` Schlag 3
+  - Spieler 2: `Pfeiltasten` bewegen, `Pfeil oben` springen, `0` Schlag 1, `1` Schlag 2, `2` Schlag `3`
   - `ESC` oeffnet das Menü; im Charakterauswahlmenü navigiert ihr mit der Maus.
 
 - Bekannte Einschraenkungen (Dinge, die nicht funktionieren):
@@ -23,7 +23,7 @@
 ## Installation
 1. Voraussetzungen: Python 3.10 oder neuer sowie `pip`.
 2. (Optional) Virtuelle Umgebung erstellen und aktivieren.
-3. Abhaengigkeiten installieren: `python -m pip install -r requirements.txt`
+3. Abhaengigkeiten installieren: `python -m pip install -r requirements.txt` oder `python -m pip install "arcade==3.3.2"`
 4. Spiel starten: `python3 main.py`
 
 ## Kurze Zusammenfassung des Projekts
