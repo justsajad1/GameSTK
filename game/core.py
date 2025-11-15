@@ -252,6 +252,8 @@ class Fighter:
         self.effect_intervals: Dict[str, float] = {}
         self.active_effects: list[ActiveEffect] = []
 
+        self.death_animation_done = False
+
         self.animations: Dict[str, TextureBundle] = {}
         self.frame_intervals: Dict[str, float] = {}
         self.image: Optional[arcade.Texture] = None
@@ -425,6 +427,7 @@ class Fighter:
         self.health = 100
         self.is_attacking = False
         self.is_dead = False
+        self.death_animation_done = False
         self.state = "idle"
         self.frame_index = 0
         self.frame_timer = 0
@@ -666,6 +669,8 @@ class Fighter:
         self.state = "death"
         self.is_dead = True
         self.frame_timer = 0
+        self.frame_index = 0
+        self.death_animation_done = False
         ko_sound = self.sounds.get("ko") if self.sounds else None
         if ko_sound:
             ko_sound.play()
@@ -694,7 +699,10 @@ class Fighter:
                 if self.frame_timer < 0:
                     self.frame_timer = 0
                 self.frame_index += 1
-            self.image = frames[min(self.frame_index, len(frames) - 1)]
+            last_index = len(frames) - 1
+            self.image = frames[min(self.frame_index, last_index)]
+            if self.frame_index >= last_index:
+                self.death_animation_done = True
             return
 
         self.frame_timer += 1

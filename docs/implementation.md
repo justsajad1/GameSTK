@@ -5,7 +5,7 @@ Hier berichte ich (Sajad) Lead-Developer (unterstützt von Eddy und Vinh) über 
 ## Codestruktur
 
 * **Wurde der Prototyp weiterentwickelt oder "from Scratch" begonnen?**  
-  Ausgangspunkt war ein funktionsfähiger Pygame-Prototyp. Mithilfe von KI wurde daraus ein Arcade-3.3.2-Gerüst generiert, das wir anschließend manuell verfeinert haben: Event-Loop, Rendering, Asset-Ladepfade sowie neue Features (Charakterauswahl, Tag/Nacht-Modus, Pausenlogik) entstanden Schritt für Schritt direkt in Arcade.
+Ausgangspunkt war ein funktionsfähiger Pygame-Prototyp, den Vinh geschrieben hat. Wir haben diesen Prototyp verfeinert und neue Features hinzugefügt. Nachdem wir erfahren hatten, dass wir mit Arcade arbeiten sollten, haben wir mithilfe von KI ein Arcade-3.3.2-Gerüst generiert und dieses anschließend manuell verfeinert. So sind Schritt für Schritt in Arcade ein Event-Loop, Rendering, Asset-Ladepfade sowie neue Features (Charakterauswahl, Tag/Nacht-Modus, Pausenlogik) entstanden.
 
 * **Wie ist der Code organisiert?**  
   - `game/main.py`: setzt das Arbeitsverzeichnis auf die Projektwurzel und startet das Fenster, egal ob das Paket oder das Skript ausgeführt wird.  
@@ -78,11 +78,12 @@ Hier berichte ich (Sajad) Lead-Developer (unterstützt von Eddy und Vinh) über 
 
 * **Welche technischen Features wurden umgesetzt?**  
   - Lokales 2-Spieler-Fighting mit frei belegbaren Tasten je Spieler; `_normalize_player_controls()` verhindert doppelte Belegungen.  
-  - Drei Attacken pro Kämpfer inklusive Cooldown, Hit-Frame-Ratio, optionalem VFX (z. B. Projektile beim Samurai) und individuellen Schadenswerten.  
+  - Drei Attacken pro Kämpfer inklusive Cooldown, Hit-Frame-Ratio, optionalem VFX (z. B. Projektile beim Samurai) und individuellen Schadenswerten; Attack 1 lässt sich blitzschnell auslösen, verursacht aber weniger Schaden, Attack 2 ist der mittlere Allrounder, und Attack 3 trifft hart, braucht jedoch die längste Ausführungszeit.  
   - Vollständiger Match-Flow: Timer (`ROUND_TIME_LIMIT`), Sudden-Death-Regeln, automatischer Runden-/Match-Reset, HUD mit Lebensbalken, Score-Pips und Modusanzeige.  
   - Tag-/Nacht-Option mit eigenen Hintergrund-Texturen, Kamerawobble für Parallax-Effekt und gestreamter Musik, die im Loop läuft.  
   - Datengetriebener Kämpferkatalog (`settings.FIGHTERS`) mit Sprite-Verzeichnissen, Frame-Größen, Actionsheets und Effekten; neue Charaktere benötigen lediglich Asset-Einträge.  
   - Charakterauswahl- und Optionsmenü für Maus/Keyboard, inklusive visueller Hervorhebung, sowie Pausenmenü mit Hotkeys für Fortsetzen, Neustart und Menü.
+  - **NEU: Todesanimationen mit Endbild** – ChatGPT half mir beim ersten Prototyp (State-Flag + Round-Gating), ich habe daraus eine robuste Lösung gebaut: Jeder `Fighter` setzt beim Sterben `death_animation_done`, `animate()` schreitet alle Frames von `Death.png` durch und markiert erst am letzten Frame den Abschluss. `StickmanFighterGame.on_update()` wartet so lange, bis alle gefallenen Kämpfer ihr finales Sprite erreicht haben, bevor `finish_round()` aufgerufen wird. Dadurch bleibt der KO-Moment sichtbar, statt sofort ins HUD zu springen.
   ```python
   DEFAULT_FIGHTER_SELECTION = {
       "player1": "samurai_commander",
